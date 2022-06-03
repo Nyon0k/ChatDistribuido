@@ -1,7 +1,7 @@
 # -*- enconding: utf-8
 
-import socket, json, sys, select, threading
-import Peer, RichTextOnTerminal
+import socket, json, sys, select, threading, random
+import RichTextOnTerminal
 
 '''
 Classe Usuario: 
@@ -11,6 +11,11 @@ Classe Usuario:
 '''
 
 class Usuario:
+    # Parâmetros da classe
+    peersConectados = {}      # Hashmap do tipo {username : {"socket": SOCKET, "cor": COR} } para armazenar informalções dos peers conectados
+    lock = threading.Lock()   # Lock para evitar condições de corrida no dicionário acima
+    # Logado = False ??
+
     # Construtor da Classe
     # // Entrada: Um host,porta,nConexoes para aceitar peers e HOSTSC,PORTASC do Servidor Central (para requisições)
     def __init__(self, host, porta, nConexoes, HOSTSC, PORTASC):
@@ -22,19 +27,20 @@ class Usuario:
         self.portasc = PORTASC
         
         self.username = ""  # nickname (ou username) ativo no Servidor Central
-        self.usuariosOnline = {} # HashMap (dicionário) que armazena a lista de usuários online (resposta do SC)
         
-        self.usuariosConectados = {} # Hashmap cuja chave é um username e o valor é uma lista: [socket, cor]
-            
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.usuariosOnline = {} # HashMap (dicionário) que armazena a lista de usuários online (resposta do SC)
+                  
+        self.sockServidor = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sockPassivo_p2p = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    
         self.cor = RichTextOnTerminal.RichTextOnTerminal()  # instância rich text (deixa o texto mais rico)
         self.entradas = [sys.stdin] # Inclui o stdin na lista de entradas que aguardam I/O do socket
     
-    # Funcionalidade 1. Comunicação com Servidor Central #
+    # -------------------------------------------------------- Funcionalidade 1. Comunicação com Servidor Central -------------------------------------------------------- #
     
     # Faz a conexão da aplicação do usuário final com Servidor Central #
     def conectarServCentral(self):
-        return self.sock.connect((self.hostsc, self.portasc))
+        return self.sockServidor.connect((self.hostsc, self.portasc))
     
     # Faz a requisição de login no Servidor Central sob o nickname (username) definido #
     def requisitarLogin(self):
@@ -45,7 +51,7 @@ class Usuario:
         }
         requisicaoJSON = json.dumps(requisicao_servidor)
         bytesEnviados = bytes(requisicaoJSON, "utf-8")
-        self.sock.sendall(bytesEnviados)
+        self.sockServidor.sendall(bytesEnviados)
         self.receberResposta()
         
     # Faz a requisição de logoff no Servidor Central sob o username atual, permitindo trocá-lo #
@@ -56,7 +62,7 @@ class Usuario:
         }
         requisicaoJSON = json.dumps(requisicao_servidor)
         bytesEnviados = bytes(requisicaoJSON, "utf-8")
-        self.sock.sendall(bytesEnviados)
+        self.sockServidor.sendall(bytesEnviados)
         self.receberResposta()
     
     # Faz a requisição da lista de usuários online (disponíveis) para iniciar uma conversa #
@@ -64,12 +70,12 @@ class Usuario:
         requisicao_servidor = {"operacao": "get_lista"}
         requisicaoJSON = json.dumps(requisicao_servidor)
         bytesEnviados = bytes(requisicaoJSON, "utf-8")
-        self.sock.sendall(bytesEnviados)
+        self.sockServidor.sendall(bytesEnviados)
         self.receberResposta()
     
     # Método único que recebe e imprime a resposta (p/ usuário final) de cada requisição acima # 
     def receberResposta(self):
-        bytesRecebidos = self.sock.recv(1024)
+        bytesRecebidos = self.sockServidor.recv(1024)
         dados = str(bytesRecebidos, "utf-8")
         dadosJSON = json.loads(dados)
         operacao = dadosJSON["operacao"]
@@ -91,7 +97,7 @@ class Usuario:
             for cliente in clientes:
                 print('\t' + self.cor.tciano() + '@' + cliente + self.cor.end())
                 
-    # Funcionalidade 2. Interface com usuário final #   
+    # -------------------------------------------------------- Funcionalidade 2. Interface com usuário final -------------------------------------------------------- #   
     
     # Permite o usuário setar seu username (nickname) #
     def definirUsername(self):
@@ -144,15 +150,15 @@ class Usuario:
         
         print("Digite '@menu' para saber os comandos")
         
-        self.peer = Peer.PeerToPeer(self.host, self.porta, self.nConexoes)  # Cria uma instância da classe peer (para lidar com essas comunicações)
-        self.entradas.append(self.peer.sock) # Inclui o socket do peer na lista de entradas selecionadas enquanto aguarda I/O
+        self.aguardaConexoes_p2p()
+        self.entradas.append(self.sockPassivo_p2p) # Inclui o socket do peer na lista de entradas selecionadas enquanto aguarda I/O
         
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
-                if entrada == self.peer.sock:
-                    novoSockPeer, endereco = self.peer.aceitarConexoes()
-                    peerThread = threading.Thread(target = self.peer.receberMensagem, args = (novoSockPeer, endereco))
+                if entrada == self.sockPassivo_p2p:
+                    novoSock_p2p, endereco = self.aceitarConexoes_p2p()
+                    peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (novoSock_p2p, endereco))
                     peerThread.start()
                 elif entrada == sys.stdin:
                     comando = input()
@@ -172,42 +178,98 @@ class Usuario:
                     elif comando == "": # Esse comando vazio é para prevenir um erro quanto ao split
                         pass
                     elif comando[0] == "@":
-                        try:
-                            username = comando.split()[0][1:] 
-                            mensagem = comando.split()[1]
-                            self.enviarMensagem(username, mensagem)
-                        except IndexError:
-                            print(self.cor.tnegrito() + self.cor.tvermelho() + "Passe uma mensagem" + self.cor.end())
+                        if self.conecta_p2p(comando) < 0: continue
+                        msgEnv = comando.split()[1]
+                        print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + self.cor.end() + self.cor.tamarelo() + self.username + self.cor.end() + ": " + msgEnv)
                     #elif comando == "@conectados":
-                     #   self.conectados()
+                    #   self.conectados(
                     elif comando.split()[0] == "@info":
                         if self.info(comando) < 0: continue
                     else:
                         print(self.cor.tnegrito() + self.cor.tvermelho() + "COMANDO DE ENTRADA INVÁLIDO !" + self.cor.end())
+   
+   # -------------------------------------------------------- Funcionalidade 3. Comunicação P2P -------------------------------------------------------- #   
 
-    def enviarMensagem(self, username, mensagem):
+    # Método que aguarda conexões P2P #
+    def aguardaConexoes_p2p(self):
+        self.sockPassivo_p2p.bind((self.host, self.porta))
+        print(self.cor.tciano() + self.cor.tnegrito() + self.cor.tsublinhado() + "Aplicação aguardando peers..." + self.cor.end())
+        self.sockPassivo_p2p.setblocking(False)
+        self.sockPassivo_p2p.listen(self.nConexoes)
+
+    # Método que aceita as conexões do modo de escuta (passivo)
+    def aceitarConexoes_p2p(self):
+        peerSock, endereco = self.sockPassivo_p2p.accept()
+        print("Conectado com: ", endereco)
+        return (peerSock, endereco)
+
+    # Método executado pelas threads para receber e imprimir as mensagens dos peers para o usuário final (sob um username) #
+    # // Entrada: peerSock cuja thread executará o receive e o endereco desse peer
+    def receberMensagem_p2p(self, peerSock, endereco):
+        while True:
+            bytesRecebidos = peerSock.recv(1024)
+            dados = str(bytesRecebidos, "utf-8")
+            dadosDict = json.loads(dados) # JSON to Dict (Hashmap)
+            username = dadosDict["username"]
+            mensagem = dadosDict["mensagem"]
+            findPeer = Usuario.peersConectados.get(username)
+            if not findPeer:
+                nAleatorioToCor = random.randint(0,3)
+                corUser = self.cor.selecionaCor(nAleatorioToCor)
+                # Condição de corrida
+                Usuario.lock.acquire()
+                Usuario.peersConectados[username] = {"socket": peerSock, "cor": corUser }
+                Usuario.lock.release()
+                # Fim da Condição de corrida
+            corUser = Usuario.peersConectados.get(username)["cor"]
+            print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + corUser() + username + self.cor.end() + ": " + mensagem)
+            
+    # Método que faz as conexões P2P # 
+    # // Entrada: 
+    def conecta_p2p(self, comando):
+        try:
+            username = comando.split()[0][1:] 
+            mensagem = comando.split()[1]
+        except IndexError:
+            print(self.cor.tnegrito() + self.cor.tvermelho() + "Informe a mensagem após o <USERNAME>" + self.cor.end())
+            return -1
+        
         findUserON = self.usuariosOnline.get(username)
         if not findUserON:
-            print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não logado. Requisite a lista para atualizá-la" + self.cor.end())
-        else:
-            findPeer = self.usuariosConectados.get(username)
-            enderecoPeer = findUserON["Endereco"]
-            portaPeer = int(findUserON["Porta"])
-            if not findPeer:
-                self.sockAtivo = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-                self.sockAtivo.connect((enderecoPeer,portaPeer))
-                corUser = self.cor.corAleatoria() 
-                self.usuariosConectados[username] = [self.sockAtivo, corUser ]
-                # resgatar a cor de um usuario
-                # corUser = self.usuariosConectados.get(username)[1]
-                # print(corUser() + + self.cor.end())
-                print("Conectado com @ " + self.cor.corUser() + username + self.cor.end() + ': '+ enderecoPeer)
-            else:
-                pass
-                #sockAtivo = self.usuariosConectados.get(username)[0] # socket
-                
+            print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não logado. Requisite a lista de usuários, para atualizá-la" + self.cor.end())
+            return -1
+        
+        enderecoPeer = findUserON["Endereco"]
+        portaPeer = int(findUserON["Porta"])
+        
+        findPeer = Usuario.peersConectados.get(username)
+        if not findPeer:
+            self.sockAtivo_p2p = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             
+            nAleatorioToCor = random.randint(0,3) # seleciona um nº aleatorio para decidir uma cor para cada usuario conectado
+            corUser = self.cor.selecionaCor(nAleatorioToCor)
             
+            Usuario.peersConectados[username] = {
+                "socket": self.sockAtivo_p2p, 
+                "cor": corUser 
+            }
+            
+            self.sockAtivo_p2p.connect((enderecoPeer, portaPeer))
+            print("Conectado com @" + corUser() + username + self.cor.end() + ': '+ enderecoPeer)
+        
+        self.enviarMensagem(username, mensagem )    
+        return 1
+    
+    # Método que envia mensagens #
+    def enviarMensagem(self, username, mensagem):
+        socket = Usuario.peersConectados.get(username)["socket"]
+        dictToJSON = {
+            "username" : username,
+            "mensagem" : mensagem
+        }
+        JSONToString = json.dumps(dictToJSON)
+        StringToBytes = bytes(JSONToString, "utf-8")
+        socket.sendall(StringToBytes)
             
 # ToDo - Tratar erro, caso o HOSTSC,PORTASC sejam invalidos. Bloquear o usuário final de avançar
 def main():

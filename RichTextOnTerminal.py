@@ -1,7 +1,5 @@
 #-*- encoding: utf-8
 
-import random
-
 '''' 
 Classe simples, que implementa caracteres de escape (ANSI), para 
 deixar o texto mais rico, impresso no terminal, através de cores 
@@ -16,15 +14,15 @@ class RichTextOnTerminal:
         # Caracter especial de escape ANSI, que reseta as formatações
         self.reset_ANSI = "\u001b[0m"
     
-    def corAleatoria(self):
-        nAleatorio = random.randint(0,3) # Escolhe um nº Aleatorio em [0,3]
-        if nAleatorio == 0:
+    # Retorna o endereço em memória da função de cada cor selecionada por n# 
+    def selecionaCor(self, n):
+        if n == 0:
             return self.tverde
-        if nAleatorio == 1:
+        if n == 1:
             return self.tamarelo
-        if nAleatorio == 2:
+        if n == 2:
             return self.tazul
-        if nAleatorio == 3:
+        if n == 3:
             return self.trosa
     
     # Formatação de cores em foreground #
