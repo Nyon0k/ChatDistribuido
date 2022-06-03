@@ -179,9 +179,6 @@ class Usuario:
                         pass
                     elif comando[0] == "@":
                         if self.conecta_p2p(comando) < 0: continue
-                        msgEnv = comando.split()[1]
-                        print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + self.cor.end() + self.cor.tamarelo() 
-                        + self.username + self.cor.end() + ": " + msgEnv)
                     #elif comando == "@conectados":
                     #   self.conectados(
                     elif comando.split()[0] == "@info":
@@ -230,7 +227,7 @@ class Usuario:
     def conecta_p2p(self, comando):
         try:
             username = comando.split()[0][1:] 
-            mensagem = comando.split()[1]
+            mensagem = comando[len(username) + 1:]
         except IndexError:
             print(self.cor.tnegrito() + self.cor.tvermelho() + "Informe a mensagem após o <USERNAME>" + self.cor.end())
             return -1
@@ -262,10 +259,11 @@ class Usuario:
         return 1
     
     # Método que envia mensagens #
+    # Ta funcionando em pcs diferentes, mas em 1 so via
     def enviarMensagem(self, username, mensagem):
         socket = Usuario.peersConectados.get(username)["socket"]
         dictToJSON = {
-            "username" : username,
+            "username" : self.username,
             "mensagem" : mensagem
         }
         JSONToString = json.dumps(dictToJSON)
@@ -274,7 +272,7 @@ class Usuario:
             
 # ToDo - Tratar erro, caso o HOSTSC,PORTASC sejam invalidos. Bloquear o usuário final de avançar
 def main():
-    host = ''     # Endereço IP do Usuário Final 
+    host = '192.168.0.66'     # Endereço IP do Usuário Final 
     porta = input("Digite a PORTA para se manter em escuta: ")    # Aceita conexões nessa porta
     nConexoes = 3   # nConexoes aceitas = nº conversas
     

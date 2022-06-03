@@ -146,8 +146,8 @@ class ServidorCentral:
     
 # Função principal do Servidor #
 def main():
-    HOSTSC = ''
-    PORTASC = 9131
+    HOSTSC = '192.168.0.66'
+    PORTASC = 9000
     nConexoes = 3
     servidor = ServidorCentral(HOSTSC, PORTASC, nConexoes)
     servidor.start()
