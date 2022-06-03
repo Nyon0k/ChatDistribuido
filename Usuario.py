@@ -14,6 +14,7 @@ class Usuario:
     # Parâmetros da classe
     peersConectados = {}      # Hashmap do tipo {username : {"socket": SOCKET, "cor": COR} } para armazenar informalções dos peers conectados
     lock = threading.Lock()   # Lock para evitar condições de corrida no dicionário acima
+    
     # Logado = False ??
 
     # Construtor da Classe
@@ -151,8 +152,8 @@ class Usuario:
         print("Digite '@menu' para saber os comandos")
         
         self.aguardaConexoes_p2p()
-        self.entradas.append(self.sockPassivo_p2p) # Inclui o socket do peer na lista de entradas selecionadas enquanto aguarda I/O
-        
+        self.entradas.append(self.sockPassivo_p2p) # Inclui o socket Passivo do peer na lista de entradas selecionadas enquanto aguarda I/O
+
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
@@ -242,24 +243,28 @@ class Usuario:
         
         findPeer = Usuario.peersConectados.get(username)
         if not findPeer:
-            self.sockAtivo_p2p = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+            sockAtivo_p2p = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+
+            sockAtivo_p2p.connect((enderecoPeer, portaPeer))
+           
             
             nAleatorioToCor = random.randint(0,3) # seleciona um nº aleatorio para decidir uma cor para cada usuario conectado
             corUser = self.cor.selecionaCor(nAleatorioToCor)
             
             Usuario.peersConectados[username] = {
-                "socket": self.sockAtivo_p2p, 
+                "socket": sockAtivo_p2p, 
                 "cor": corUser 
             }
-            
-            self.sockAtivo_p2p.connect((enderecoPeer, portaPeer))
             print("Conectado com @" + corUser() + username + self.cor.end() + ': '+ enderecoPeer)
-        
+            
+            # Assim que ele conecta, ele designa uma thread para receberMensagem nesse socket (isso só roda 1 vez)
+            peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (sockAtivo_p2p, enderecoPeer))
+            peerThread.start()
+                    
         self.enviarMensagem(username, mensagem )    
         return 1
     
     # Método que envia mensagens #
-    # Ta funcionando em pcs diferentes, mas em 1 so via
     def enviarMensagem(self, username, mensagem):
         socket = Usuario.peersConectados.get(username)["socket"]
         dictToJSON = {
@@ -272,7 +277,7 @@ class Usuario:
             
 # ToDo - Tratar erro, caso o HOSTSC,PORTASC sejam invalidos. Bloquear o usuário final de avançar
 def main():
-    host = '192.168.0.66'     # Endereço IP do Usuário Final 
+    host = input("Digite o seu IP: ")     # Endereço IP do Usuário Final 
     porta = input("Digite a PORTA para se manter em escuta: ")    # Aceita conexões nessa porta
     nConexoes = 3   # nConexoes aceitas = nº conversas
     
