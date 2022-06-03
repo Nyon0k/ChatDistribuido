@@ -198,10 +198,12 @@ class Usuario:
             info = self.usuariosOnline.get(username)
             if info:
                 print(self.cor.tazul() + self.cor.tsublinhado() + self.cor.tnegrito() + "Informações de: " + self.cor.end() + '@' + username)
-                print(self.cor.tazul() + "Endereco: "  + self.cor.end() + info["Endereco"] + '\n' + self.cor.tazul() + "Porta: " + self.cor.end() + info["Porta"])
+                print(self.cor.tazul() + "Endereco: "  + self.cor.end() + info["Endereco"] + '\n' + 
+                      self.cor.tazul() + "Porta: " + self.cor.end() + info["Porta"])
                 return 1
             else:
-                print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não online. Requisite a lista de usuários, para atualizá-la" + self.cor.end())
+                print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não online. Requisite a lista de usuários, para atualizá-la" + 
+                      self.cor.end())
                 return -1
         except IndexError:
             chatsAbertos = len(Usuario.peersConectados)
