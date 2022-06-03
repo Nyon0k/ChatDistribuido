@@ -36,7 +36,7 @@ class Usuario:
         self.cor = RichTextOnTerminal.RichTextOnTerminal()  # instância rich text (deixa o texto mais rico)
         self.entradas = [sys.stdin] # Inclui o stdin na lista de entradas que aguardam I/O do socket
     
-    # -------------------------------------------------------- Funcionalidade 1. Comunicação com Servidor Central -------------------------------------------------------- #
+    # ---------------------------------- Funcionalidade 1. Comunicação com Servidor Central ---------------------------------- #
     
     # Faz a conexão da aplicação do usuário final com Servidor Central #
     def conectarServCentral(self):
@@ -97,7 +97,7 @@ class Usuario:
             for cliente in clientes:
                 print('\t' + self.cor.tciano() + '@' + cliente + self.cor.end())
                 
-    # -------------------------------------------------------- Funcionalidade 2. Interface com usuário final -------------------------------------------------------- #   
+    # ---------------------------------- Funcionalidade 2. Interface com usuário final ---------------------------------- #   
     
     # Permite o usuário setar seu username (nickname) #
     def definirUsername(self):
@@ -180,7 +180,8 @@ class Usuario:
                     elif comando[0] == "@":
                         if self.conecta_p2p(comando) < 0: continue
                         msgEnv = comando.split()[1]
-                        print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + self.cor.end() + self.cor.tamarelo() + self.username + self.cor.end() + ": " + msgEnv)
+                        print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + self.cor.end() + self.cor.tamarelo() 
+                        + self.username + self.cor.end() + ": " + msgEnv)
                     #elif comando == "@conectados":
                     #   self.conectados(
                     elif comando.split()[0] == "@info":
@@ -188,7 +189,7 @@ class Usuario:
                     else:
                         print(self.cor.tnegrito() + self.cor.tvermelho() + "COMANDO DE ENTRADA INVÁLIDO !" + self.cor.end())
    
-   # -------------------------------------------------------- Funcionalidade 3. Comunicação P2P -------------------------------------------------------- #   
+   # ---------------------------------- Funcionalidade 3. Comunicação P2P ----------------------------------- #   
 
     # Método que aguarda conexões P2P #
     def aguardaConexoes_p2p(self):
