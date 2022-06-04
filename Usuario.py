@@ -127,7 +127,7 @@ class Usuario:
                     novoSock_p2p, endereco = self.aceitarConexoes_p2p()
                     peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (novoSock_p2p, endereco))
                     peerThread.start()
-                    clientes_p2p.append()
+                    clientes_p2p.append(peerThread)
                 elif entrada == sys.stdin:
                     comando = input()
                     if comando == "@menu":
