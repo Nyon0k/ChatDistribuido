@@ -155,12 +155,14 @@ class Usuario:
         self.entradas.append(self.sockPassivo_p2p) # Inclui o socket Passivo do peer na lista de entradas selecionadas enquanto aguarda I/O
 
         while True:
+            clientes_p2p = []
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
                 if entrada == self.sockPassivo_p2p:
                     novoSock_p2p, endereco = self.aceitarConexoes_p2p()
                     peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (novoSock_p2p, endereco))
                     peerThread.start()
+                    clientes_p2p.append()
                 elif entrada == sys.stdin:
                     comando = input()
                     if comando == "@menu":
@@ -169,7 +171,13 @@ class Usuario:
                         self.definirUsername()
                     elif comando == "@exit":    # Falta implementar mas acho que é o mesmo caso do exit no Servidor Central. Talvez algo tenha que ser 
                         # feito quanto as threads
-                        pass
+                        #self.requisitarLogoff()
+                        for c in clientes_p2p: #aguarda todas as threads terminarem
+                            c.join()
+                        print("Threads Encerradas!!")
+                        self.sockPassivo_p2p.close()
+                        exit(1)
+                        
                     elif comando == "@login":
                         self.requisitarLogin()
                     elif comando == "@logoff":

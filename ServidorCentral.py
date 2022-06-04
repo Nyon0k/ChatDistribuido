@@ -49,6 +49,7 @@ class ServidorCentral:
     # // Chama o aceitarConexoes (acima), que designa threads para atender cada requisição de cada conexão feita
     # // E lida (handler) com os comandos da entrada padrão (stdin)
     def start(self): 
+        clientes = [] #armazena as threads criadas para fazer join
         print("Digite 'comandos' para saber os comandos do Servidor")
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
@@ -58,6 +59,7 @@ class ServidorCentral:
                     print("Aguardando requisições de " + str(endereco))
                     usuario_onthread = threading.Thread(target = self.atenderRequisicoes, args = (clisock, endereco))
                     usuario_onthread.start()
+                    clientes.append(usuario_onthread)  #armazena a referencia da thread para usar com join()
                 elif entrada == sys.stdin:
                     comandoEntrada = input()
                     if comandoEntrada == "info":
@@ -71,8 +73,16 @@ class ServidorCentral:
                     elif comandoEntrada == "exit":
                         # Precisa implementar o deslogamento de todos os usuários online, que provavelmente tem haver com o encerramento de threads (join)
                         # Ele desliga o servidor, mas as threads ativas continuam rodando. Tem que resolver isso
+                        
+                        for c in clientes: #aguarda todas as threads terminarem
+                            c.join()
+                        print("Threads Encerradas!!")
                         self.sock.close()
-                        exit(1)
+                        sys.exit()
+
+
+                        #self.sock.close()
+                        #exit(1)
 
     # Método executado pelas threads para atender (handler) as requisições de cada cliente #
     # // Entrada: O socket do cliente, no qual as threads executam o receive para receber dados simultaneamente e o endereco deles
@@ -80,6 +90,21 @@ class ServidorCentral:
         while True:
             bytesRecebidos = clisock.recv(1024)
             dados = str(bytesRecebidos, "utf-8")
+
+            if not dados:
+                #se o Usuario esta logado e fecha o programa, tira nome da lista, isso é quando o servidor esta atendendo requisçoes do cliente
+                if 'dadosJSON' in locals():
+                    username_usuario = dadosJSON["username"]
+                    status, mensagem = self.deslogarUsuario(username_usuario)
+                    print(str(endereco) + '-> encerrou')
+                    clisock.close()
+                    return
+                else:
+                    #se o usuario não esta logado mas fecha o programa, isso é quando o servidor esta atendendo requisçoes do cliente
+                    print(str(endereco) + '-> encerrou')
+                    clisock.close()
+                    return
+
             dadosJSON = json.loads(dados)
             operacao_usuario = dadosJSON["operacao"]
             if operacao_usuario == "login":
@@ -90,6 +115,15 @@ class ServidorCentral:
                 status, mensagem = self.deslogarUsuario(username_usuario)
             elif operacao_usuario == "get_lista":
                 status, mensagem = self.getUsuariosOnline()
+            elif not operacao_usuario:
+                print(str(endereco) + '-> encerrou')
+                #del conexoes[clisock]
+                #entradas.remove(clisock)
+                clisock.close()
+                return
+                #when the user exists close the thread for his requirements 
+                
+
             else: # Se o cliente tiver tratamento de erro quanto as requisições, essa condição nunca roda
                 print("Comando inválido recebido de ", clisock)
             
@@ -146,8 +180,8 @@ class ServidorCentral:
     
 # Função principal do Servidor #
 def main():
-    HOSTSC = '192.168.0.66'
-    PORTASC = 9001
+    HOSTSC = '127.0.0.1'
+    PORTASC = 9212
     nConexoes = 3
     servidor = ServidorCentral(HOSTSC, PORTASC, nConexoes)
     servidor.start()
