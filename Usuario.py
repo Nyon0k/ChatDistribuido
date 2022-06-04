@@ -17,6 +17,7 @@ class Usuario:
     # Estrutura do dict: {username : { "socket": SOCKET, "cor": COR} }
     peersConectados = {} # username é uma chave e o valor associado é outro dict com chaves SOCKET e COR
     lock = threading.Lock()   # Lock para evitar condições de corrida no dicionário acima (peersConectados)
+    Logado = False  # Variável booleana que guarda o estado do usuario quanto ao login no SC. Online = True, Off = False
     
     # Construtor da Classe
     # // Entrada: Um host,porta,nConexoes para aceitar peers e HOSTSC,PORTASC do Servidor Central (para requisições)
@@ -87,6 +88,10 @@ class Usuario:
         resposta = ""
         if status == 200:
             resposta += self.cor.tazul() + self.cor.tnegrito() + self.cor.tsublinhado()
+            if operacao == "login":
+                Usuario.Logado = True
+            elif operacao == "logoff":
+                Usuario.Logado = False
         else:
             resposta += self.cor.tvermelho() + self.cor.tnegrito() + self.cor.tsublinhado()
         if operacao != "get_lista":
@@ -109,7 +114,7 @@ class Usuario:
         self.definirUsername('')    # chama com parâmetro vazio, pois nenhum username é passado na linha de comando
         self.conectarServCentral()
         
-        print("Digite '@menu' para saber os comandos")
+        print("Digite " + self.cor.tazul() + "@menu" + self.cor.end() + " para saber os comandos")
         
         self.aguardaConexoes_p2p() # Coloca o sockPassivo em modo de escuta para aguardar conexões dos pares (peers)
         self.entradas.append(self.sockPassivo_p2p) # Inclui o sockPassivo do peer na lista de entradas selecionadas enquanto aguarda I/O
@@ -174,7 +179,7 @@ class Usuario:
     # Permite o usuário setar seu (novo) username (nickname) #
     # // Entrada: Comando digitado na interface
     def definirUsername(self, comando):
-        if self.usuariosOnline.get(self.username):  # Se o usuario está online, faça logoff antes de setar outro nickname
+        if Usuario.Logado:  # Se o usuario está online, faça logoff antes de setar outro nickname
             print("Logoff sob o antigo username sendo efetuado primeiro...")
             self.requisitarLogoff()
             print('\n')
@@ -186,8 +191,8 @@ class Usuario:
         
         print(self.cor.tazul() + self.cor.tnegrito() + self.cor.tsublinhado() + "Username definido!"+self.cor.end())
         print("Bem vindo, @" + self.cor.tazul() + self.cor.tnegrito() + self.cor.tsublinhado() + self.username + self.cor.end())
-        print("Faça '@login' para se registrar no Servidor Central")
-       
+        print("Faça " + self.cor.tazul()  +  "@login" + self.cor.end() + " para se registrar no Servidor Central")
+                    
     # Método que imprime as informações de um usuário específico online. Caso não seja informado tal usuário, 
     # imprime as informação de conexão do USERNAME do usuário final no Servidor Central #
     # // Entrada: Comando digitado na interface
@@ -202,8 +207,8 @@ class Usuario:
                       self.cor.tazul() + "Porta: " + self.cor.end() + info["Porta"])
                 return 1
             else:
-                print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não online. Requisite a lista de usuários, para atualizá-la" + 
-                      self.cor.end())
+                print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário: " + self.cor.tazul() + '@' + username + self.cor.end() + 
+                      self.cor.tvermelho() + " não online. Requisite a lista de usuários, para atualizá-la" + self.cor.end())
                 return -1
         except IndexError:
             chatsAbertos = len(Usuario.peersConectados)
@@ -257,7 +262,12 @@ class Usuario:
             
     # Método que faz as conexões P2P de forma ativa # 
     # // Entrada: Comando digitado na interface
-    def conecta_p2p(self, comando):
+    def conecta_p2p(self, comando): 
+        if not Usuario.Logado: # Se o usuario não estiver online
+            print("Fazendo login sob esse username: " + self.cor.tazul() + '@' + self.username + self.cor.end() + " primeiro...")
+            self.requisitarLogin() # força ele logar
+            if not Usuario.Logado:  return -1 # deu erro no login          
+            
         # Captura o peername (username de quem deseja-se conectar) e a mensagem
         try:
             username = comando.split()[0][1:] 
@@ -268,7 +278,8 @@ class Usuario:
         
         findUserON = self.usuariosOnline.get(username)  # Verifica se tal username está online
         if not findUserON: # Se não, então não estabelece conexão
-            print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário não online. Requisite a lista de usuários, para atualizá-la" + self.cor.end())
+            print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário: " + self.cor.tazul() + '@' + username + self.cor.end() + 
+                      self.cor.tvermelho() + " não online. Requisite a lista de usuários, para atualizá-la" + self.cor.end())
             return -1
         
         # Se sim, então faça:
