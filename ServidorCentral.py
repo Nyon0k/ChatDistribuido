@@ -73,7 +73,7 @@ class ServidorCentral:
                     elif comandoEntrada == "exit":
                         for c in clientes: #aguarda todas as threads terminarem
                             c.join()
-                        print("Threads Encerradas!!")
+                            print("Thread "+str(c)+" Encerrada")
                         self.sock.close()
                         sys.exit()
 
