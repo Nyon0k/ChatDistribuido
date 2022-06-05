@@ -118,9 +118,9 @@ class Usuario:
         
         self.aguardaConexoes_p2p() # Coloca o sockPassivo em modo de escuta para aguardar conexões dos pares (peers)
         self.entradas.append(self.sockPassivo_p2p) # Inclui o sockPassivo do peer na lista de entradas selecionadas enquanto aguarda I/O
-
+        
+        clientes_p2p = []
         while True:
-            clientes_p2p = []
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
                 if entrada == self.sockPassivo_p2p:
@@ -137,7 +137,7 @@ class Usuario:
                     elif comando == "@exit":
                         for c in clientes_p2p:   ##aguarda todas as threads terminarem
                             c.join()
-                        print("Threads Encerradas!!")
+                            print("Thread "+str(c)+" Encerrada")
                         self.sockPassivo_p2p.close()
                         exit(1)
                         # ToDO: Implementar o encerramento da aplicação. A classe Usuario tem threads executando somente o receberMensagem_p2p
