@@ -16,6 +16,7 @@ class Usuario:
     # HashMap (dict) para armazenar informações dos peers conectados
     # Estrutura do dict: {username : { "socket": SOCKET, "cor": COR} }
     peersConectados = {} # username é uma chave e o valor associado é outro dict com chaves SOCKET e COR
+    clientes_p2p = []    # Lista que armazena as threads ativas por usuario
     lock = threading.Lock()   # Lock para evitar condições de corrida no dicionário acima (peersConectados)
     Logado = False  # Variável booleana que guarda o estado do usuario quanto ao login no SC. Online = True, Off = False
     
@@ -118,7 +119,7 @@ class Usuario:
         
         self.aguardaConexoes_p2p() # Coloca o sockPassivo em modo de escuta para aguardar conexões dos pares (peers)
         self.entradas.append(self.sockPassivo_p2p) # Inclui o sockPassivo do peer na lista de entradas selecionadas enquanto aguarda I/O
-
+        
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
@@ -126,6 +127,7 @@ class Usuario:
                     novoSock_p2p, endereco = self.aceitarConexoes_p2p()
                     peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (novoSock_p2p, endereco))
                     peerThread.start()
+                    Usuario.clientes_p2p.append(peerThread) # Threads ativas por usuario
                 elif entrada == sys.stdin:
                     comando = input()
                     if comando == "@menu":
@@ -133,12 +135,12 @@ class Usuario:
                     elif comando.split()[0] == "@nick":
                         self.definirUsername(comando)
                     elif comando == "@exit":
-                        pass
-                        # ToDO: Implementar o encerramento da aplicação. A classe Usuario tem threads executando somente o receberMensagem_p2p
-                        # que são postas em execução quando: 
-                        # 1. A lista de entradas do select recebe processamento do sockPassivo_p2p. Disso, 1 thread é dada ao peer que se conecta
-                        # 2. Na 1º vez que um usuario manda mensagem para outro, ele roda o conecta_p2p que cria 1 thread para executar receberMensagem_p2p
-                        # Algo tem que ser feito algo para encerrar corretamente essas threads
+                        self.quit()
+                        for c in Usuario.clientes_p2p:   ##aguarda todas as threads terminarem
+                            c.join()
+                            print("Thread "+str(c)+" Encerrada")
+                        self.sockPassivo_p2p.close()
+                        exit(0)
                     elif comando == "@login":
                         self.requisitarLogin()
                     elif comando == "@logoff":
@@ -223,6 +225,16 @@ class Usuario:
     def conectados(self):
         pass #ToDo
 
+    # Encerra as conexões com os peers conectados #
+    def quit(self):
+        print("Encerrando...")
+        if Usuario.Logado == True:  self.requisitarLogoff()
+        for peer in Usuario.peersConectados:
+            print("Encerrando conexão com " + peer)
+            sockPeer = Usuario.peersConectados[peer].get("socket")
+            sockPeer.close()
+        return
+
    # ---------------------------------- Funcionalidade 3. Comunicação P2P ----------------------------------- #   
 
     # Método que aguarda conexões P2P, colocando ele em modo passivo para receber conexões #
@@ -243,6 +255,9 @@ class Usuario:
     def receberMensagem_p2p(self, peerSock, endereco):
         while True:
             bytesRecebidos = peerSock.recv(1024)
+            if not bytesRecebidos:  # Se não receber bytes, então um peer saiu
+                peerSock.close()    # Sendo assim, feche a conexão
+                return              # Quando retorna, as threads podem fechar
             dados = str(bytesRecebidos, "utf-8")
             # ToDo : Receber os bytes que informam o tamanho da Mensagem do peer
             dadosDict = json.loads(dados) # JSON to Dict (Hashmap)
@@ -259,7 +274,7 @@ class Usuario:
                 # Fim da Condição de corrida
             corUser = Usuario.peersConectados.get(username)["cor"]
             print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + corUser() + username + self.cor.end() + ": " + mensagem)
-            
+
     # Método que faz as conexões P2P de forma ativa # 
     # // Entrada: Comando digitado na interface
     def conecta_p2p(self, comando): 
@@ -332,6 +347,7 @@ def main():
     
     app = Usuario(host, int(porta), nConexoes, HOSTSC, int(PORTASC))
     app.start()
+    
     
 if __name__ == "__main__":
     main()
