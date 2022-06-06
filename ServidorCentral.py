@@ -50,6 +50,7 @@ class ServidorCentral:
     # // E lida (handler) com os comandos da entrada padrão (stdin)
     def start(self): 
         print("Digite 'comandos' para saber os comandos do Servidor")
+        clientes = [] #armazena as threads criadas para fazer join
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
@@ -58,6 +59,7 @@ class ServidorCentral:
                     print("Aguardando requisições de " + str(endereco))
                     usuario_onthread = threading.Thread(target = self.atenderRequisicoes, args = (clisock, endereco))
                     usuario_onthread.start()
+                    clientes.append(usuario_onthread) 
                 elif entrada == sys.stdin:
                     comandoEntrada = input()
                     if comandoEntrada == "info":
@@ -69,6 +71,12 @@ class ServidorCentral:
                     elif comandoEntrada == "comandos":
                         self.exibirComandos()
                     elif comandoEntrada == "exit":
+                        for c in clientes: #aguarda todas as threads terminarem
+                            c.join()
+                            print("Thread "+str(c)+" Encerrada")
+                        self.sock.close()
+                        sys.exit()
+
                         # Precisa implementar o deslogamento de todos os usuários online, que provavelmente tem haver com o encerramento de threads (join)
                         # Ele desliga o servidor, mas as threads ativas continuam rodando. Tem que resolver isso
                         self.sock.close()
@@ -80,20 +88,36 @@ class ServidorCentral:
         while True:
             bytesRecebidos = clisock.recv(1024)
             dados = str(bytesRecebidos, "utf-8")
-            dadosJSON = json.loads(dados)
-            operacao_usuario = dadosJSON["operacao"]
-            if operacao_usuario == "login":
-                username_usuario = dadosJSON["username"]
-                status, mensagem = self.registrarUsuarioON(username_usuario, endereco, dadosJSON["porta"])
-            elif operacao_usuario == "logoff":
-                username_usuario = dadosJSON["username"]
-                status, mensagem = self.deslogarUsuario(username_usuario)
-            elif operacao_usuario == "get_lista":
-                status, mensagem = self.getUsuariosOnline()
-            else: # Se o cliente tiver tratamento de erro quanto as requisições, essa condição nunca roda
-                print("Comando inválido recebido de ", clisock)
-            
-            self.enviarResposta(clisock, operacao_usuario, status, mensagem) # Envia as respostas de cada requisição
+
+            if not dados:
+                #se o Usuario esta logado e fecha o programa, tira nome da lista, isso é quando o servidor esta atendendo requisçoes do cliente
+                if 'dadosJSON' in locals():
+                    username_usuario = dadosJSON["username"]
+                    status, mensagem = self.deslogarUsuario(username_usuario)
+                    clisock.close()
+                    print(str(endereco) + '-> encerrou')
+                    return
+                else:
+                    #se o usuario não esta logado mas fecha o programa, isso é quando o servidor esta atendendo requisçoes do cliente
+                    clisock.close()
+                    print(str(endereco) + '-> encerrou')
+                    return
+
+            else:
+                dadosJSON = json.loads(dados)
+                operacao_usuario = dadosJSON["operacao"]
+                if operacao_usuario == "login":
+                    username_usuario = dadosJSON["username"]
+                    status, mensagem = self.registrarUsuarioON(username_usuario, endereco, dadosJSON["porta"])
+                elif operacao_usuario == "logoff":
+                    username_usuario = dadosJSON["username"]
+                    status, mensagem = self.deslogarUsuario(username_usuario)
+                elif operacao_usuario == "get_lista":
+                    status, mensagem = self.getUsuariosOnline()
+                else: # Se o cliente tiver tratamento de erro quanto as requisições, essa condição nunca roda
+                    print("Comando inválido recebido de ", clisock)
+                
+                self.enviarResposta(clisock, operacao_usuario, status, mensagem) # Envia as respostas de cada requisição
            
     # Abaixo os Event Handlers para cada operação requisitada #
     
@@ -146,8 +170,8 @@ class ServidorCentral:
     
 # Função principal do Servidor #
 def main():
-    HOSTSC = '192.168.0.66'
-    PORTASC = 9001
+    HOSTSC = ''         # Setar HOST ServidorCentral
+    PORTASC = 9003      # Setar PORTA ServidorCentral
     nConexoes = 3
     servidor = ServidorCentral(HOSTSC, PORTASC, nConexoes)
     servidor.start()
