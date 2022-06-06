@@ -24,6 +24,14 @@ class RichTextOnTerminal:
             return self.tazul
         if n == 3:
             return self.trosa
+        if n == 4:
+            return self.tvermelho
+        if n == 5:
+            return self.tpreto
+        if n == 6:
+            return self.tciano
+        if n == 7:
+            return self.tbranco
     
     # Formatação de cores em foreground #
     

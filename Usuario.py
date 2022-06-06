@@ -15,9 +15,12 @@ class Usuario:
     
     # HashMap (dict) para armazenar informações dos peers conectados
     # Estrutura do dict: {username : { "socket": SOCKET, "cor": COR} }
-    peersConectados = {} # username é uma chave e o valor associado é outro dict com chaves SOCKET e COR
+    peersConectados = {}      # username é uma chave e o valor associado é outro dict com chaves SOCKET e COR
+    
+    threads_p2p = []          # Lista que armazena as threads P2P (ativas por usuario) do sistema
     lock = threading.Lock()   # Lock para evitar condições de corrida no dicionário acima (peersConectados)
-    Logado = False  # Variável booleana que guarda o estado do usuario quanto ao login no SC. Online = True, Off = False
+    Logado = False            # Variável booleana que guarda o estado do usuario quanto ao login no SC. Online = True, Off = False
+    COND_EXIT = False         # Variável booleana que guarda a condição de encerramento da aplicação. Se @exit = True, se não = False
     
     # Construtor da Classe
     # // Entrada: Um host,porta,nConexoes para aceitar peers e HOSTSC,PORTASC do Servidor Central (para requisições)
@@ -119,7 +122,6 @@ class Usuario:
         self.aguardaConexoes_p2p() # Coloca o sockPassivo em modo de escuta para aguardar conexões dos pares (peers)
         self.entradas.append(self.sockPassivo_p2p) # Inclui o sockPassivo do peer na lista de entradas selecionadas enquanto aguarda I/O
         
-        clientes_p2p = []
         while True:
             leitura, escrita, excecao = select.select(self.entradas, [], [])
             for entrada in leitura:
@@ -127,7 +129,7 @@ class Usuario:
                     novoSock_p2p, endereco = self.aceitarConexoes_p2p()
                     peerThread = threading.Thread(target = self.receberMensagem_p2p, args = (novoSock_p2p, endereco))
                     peerThread.start()
-                    clientes_p2p.append(peerThread)
+                    Usuario.threads_p2p.append(peerThread) # Acrescenta a thread do peer na lista de threads p2p do sistema
                 elif entrada == sys.stdin:
                     comando = input()
                     if comando == "@menu":
@@ -135,29 +137,19 @@ class Usuario:
                     elif comando.split()[0] == "@nick":
                         self.definirUsername(comando)
                     elif comando == "@exit":
-                        for c in clientes_p2p:   ##aguarda todas as threads terminarem
-                            c.join()
-                            print("Thread "+str(c)+" Encerrada")
-                        self.sockPassivo_p2p.close()
+                        self.quit()
                         exit(1)
-                        # ToDO: Implementar o encerramento da aplicação. A classe Usuario tem threads executando somente o receberMensagem_p2p
-                        # que são postas em execução quando: 
-                        # 1. A lista de entradas do select recebe processamento do sockPassivo_p2p. Disso, 1 thread é dada ao peer que se conecta
-                        # 2. Na 1º vez que um usuario manda mensagem para outro, ele roda o conecta_p2p que cria 1 thread para executar receberMensagem_p2p
-                        # Algo tem que ser feito algo para encerrar corretamente essas threads
                     elif comando == "@login":
                         self.requisitarLogin()
                     elif comando == "@logoff":
                         self.requisitarLogoff()
+                        if Usuario.peersConectados: self.quitAll_p2p()   # Se houver peersConectados assim que faz logoff, fecha tudo
                     elif comando == "@get_lista":
                         self.requisitarLista()
                     elif comando == "": # Esse comando vazio é para prevenir um erro quanto ao split
                         pass
                     elif comando == "@conectados":
-                        # ToDo : Implementar para imprimir informações de todos os peers conectados ao chat#
-                        # Informações que valem ser impressas: IP, PORTA, ... 
-                        print(Usuario.peersConectados) 
-                        print(Usuario.peersConectados.keys()) 
+                        self.conectados()
                     elif comando.split()[0] == "@info":
                         if self.info(comando) < 0: continue
                     elif comando[0] == "@":
@@ -188,6 +180,9 @@ class Usuario:
         if Usuario.Logado:  # Se o usuario está online, faça logoff antes de setar outro nickname
             print("Logoff sob o antigo username sendo efetuado primeiro...")
             self.requisitarLogoff()
+            if Usuario.peersConectados: self.quitAll_p2p()   # Se houver peersConectados assim que faz logoff, fecha tudo
+            if Usuario.Logado:  # Se o usuario continua logado então deu erro logoff 
+                pass
             print('\n')
         try:
             usernameCMD = comando.split()[1]    # username passado na linha de comando
@@ -219,15 +214,32 @@ class Usuario:
         except IndexError:
             chatsAbertos = len(Usuario.peersConectados)
             print(self.cor.tazul() + self.cor.tsublinhado() + self.cor.tnegrito() + "Informações suas: " + self.cor.end() + '@' + self.username)
-            print(self.cor.tazul() + "Host: "  + self.cor.end() + self.host+ '\n' + self.cor.tazul() + "Porta: " + self.cor.end() + str(self.porta) + '\n' +
+            print(self.cor.tazul() + "Host: "  + self.cor.end() + self.host+ '\n' + 
+                  self.cor.tazul() + "Porta: " + self.cor.end() + str(self.porta) + '\n' +
                   self.cor.tazul() + "Chats abertos: " + self.cor.end() + str(chatsAbertos) ) 
             return 1       
 
     # Método que imprime as informações de todos os peers conectados ao usuario final da aplicação. #
-    # // Entrada: ToChoose
-    # // Saída: ToChoose
     def conectados(self):
-        pass #ToDo
+        print(self.cor.tsublinhado() + self.cor.tazul() + self.cor.tnegrito() + "Usuarios Conectados" + self.cor.end())
+        if len(Usuario.peersConectados) == 0:   print(self.cor.tvermelho() + "Nenhum peer conectado" + self.cor.end())
+        for peer in Usuario.peersConectados:
+            infoPeerON = self.usuariosOnline.get(peer)
+            corPeer = Usuario.peersConectados.get(peer)["cor"]
+            print(self.cor.tazul() + "Username: " + self.cor.end() + self.cor.tvermelho() + '@' + self.cor.end() + 
+                  corPeer() + peer + self.cor.end() + '\n' + 
+                  self.cor.tazul() + "Endereço: " +  self.cor.end() + corPeer() + infoPeerON["Endereco"] + self.cor.end() + '\n' + 
+                  self.cor.tazul() + "Porta: " +  self.cor.end() + corPeer() + infoPeerON["Porta"] + self.cor.end() )
+
+    # Encerra a aplicação #
+    def quit(self):
+        self.quitAll_p2p()               # Encerra todas as conexões P2P
+        Usuario.COND_EXIT = True         # Aciona o signal de exit
+        for peerThread in Usuario.threads_p2p:   
+            peerThread.join()            # aguarda todas as threads terminarem
+            print("Thread " + str(peerThread) + " Encerrada")
+        self.sockPassivo_p2p.close()
+        return
 
    # ---------------------------------- Funcionalidade 3. Comunicação P2P ----------------------------------- #   
 
@@ -247,8 +259,10 @@ class Usuario:
     # Método executado pelas threads para receber e imprimir as mensagens dos peers, na interface do usuário final #
     # // Entrada: peerSock cuja thread executará o receive e o endereco desse peer
     def receberMensagem_p2p(self, peerSock, endereco):
-        while True:
+        while not Usuario.COND_EXIT:    # Enquanto não for dado o signal de exit
             bytesRecebidos = peerSock.recv(1024)
+            if not bytesRecebidos:      # Se não receber dados    
+                break                   # quebra o loop
             dados = str(bytesRecebidos, "utf-8")
             # ToDo : Receber os bytes que informam o tamanho da Mensagem do peer
             dadosDict = json.loads(dados) # JSON to Dict (Hashmap)
@@ -256,7 +270,7 @@ class Usuario:
             mensagem = dadosDict["mensagem"]
             findPeer = Usuario.peersConectados.get(username) # Verifica se já existe uma conexão entre usuario e o peer que enviou msg
             if not findPeer:    # se não existe, registra essa conexão em peersConectados
-                nAleatorioToCor = random.randint(0,3)
+                nAleatorioToCor = random.randint(0,7)
                 corUser = self.cor.selecionaCor(nAleatorioToCor)
                 # Condição de corrida
                 Usuario.lock.acquire()
@@ -265,7 +279,9 @@ class Usuario:
                 # Fim da Condição de corrida
             corUser = Usuario.peersConectados.get(username)["cor"]
             print(self.cor.tvermelho() + self.cor.tnegrito() + "@" + corUser() + username + self.cor.end() + ": " + mensagem)
-            
+        # Quando signal for dado, fecha o socket do peer
+        peerSock.close()
+        return
     # Método que faz as conexões P2P de forma ativa # 
     # // Entrada: Comando digitado na interface
     def conecta_p2p(self, comando): 
@@ -282,6 +298,9 @@ class Usuario:
             print(self.cor.tnegrito() + self.cor.tvermelho() + "Informe a mensagem após o <Peername>" + self.cor.end())
             return -1
         
+        if username == self.username:   # Se o usuario em que deseja-se conectar for si mesmo
+            print(self.cor.tnegrito() + self.cor.tvermelho() + "Não é possível se comunicar com si mesmo" + self.cor.end())
+            return -1                   # insucesso na conexão
         findUserON = self.usuariosOnline.get(username)  # Verifica se tal username está online
         if not findUserON: # Se não, então não estabelece conexão
             print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário: " + self.cor.tazul() + '@' + username + self.cor.end() + 
@@ -297,7 +316,7 @@ class Usuario:
             sockAtivo_p2p = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
             sockAtivo_p2p.connect((enderecoPeer, portaPeer))
            
-            nAleatorioToCor = random.randint(0,3) # seleciona um nº aleatorio para decidir uma cor para cada usuario conectado
+            nAleatorioToCor = random.randint(0,7) # seleciona um nº aleatorio para decidir uma cor para cada usuario conectado
             corUser = self.cor.selecionaCor(nAleatorioToCor)
             Usuario.peersConectados[username] = {
                 "socket": sockAtivo_p2p, 
@@ -326,6 +345,27 @@ class Usuario:
         StringToBytes = bytes(JSONToString, "utf-8")
         # ToDo: Enviar o tamMensagem em 2 bytes para o peer
         socket.sendall(StringToBytes)
+    
+    # Encerra todas as conexões P2P do Usuario #
+    def quitAll_p2p(self):
+        print(self.cor.tazul() + "Encerrando todas as conexões..." + self.cor.tazul() + self.cor.end())
+        if Usuario.Logado == True:  
+            self.requisitarLogoff()
+            if Usuario.Logado:  # Se o usuário contina logado, deu erro no logoff
+                pass
+            
+        # Encerrando todas as conexões
+        for peer in Usuario.peersConectados:
+            print("Encerrando conexão com " + peer)
+            sockPeer = Usuario.peersConectados[peer].get("socket")
+            sockPeer.close()
+        
+        # Limpando a memória (free)
+        Usuario.lock.acquire()
+        Usuario.peersConectados = {}   # Torna o hashmap (dict) de peers conectados vazio
+        Usuario.threads_p2p = []       # Torna a lista de threads vazia
+        Usuario.lock.release()
+        return
             
 # ToDo - Tratar erro, caso o HOSTSC,PORTASC sejam invalidos. Bloquear o usuário final de avançar
 def main():
