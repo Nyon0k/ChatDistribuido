@@ -282,7 +282,6 @@ class Usuario:
         # Quando signal for dado, fecha o socket do peer
         peerSock.close()
         return
-
     # Método que faz as conexões P2P de forma ativa # 
     # // Entrada: Comando digitado na interface
     def conecta_p2p(self, comando): 
@@ -302,7 +301,6 @@ class Usuario:
         if username == self.username:   # Se o usuario em que deseja-se conectar for si mesmo
             print(self.cor.tnegrito() + self.cor.tvermelho() + "Não é possível se comunicar com si mesmo" + self.cor.end())
             return -1                   # insucesso na conexão
-        
         findUserON = self.usuariosOnline.get(username)  # Verifica se tal username está online
         if not findUserON: # Se não, então não estabelece conexão
             print(self.cor.tnegrito() + self.cor.tvermelho() + "Usuário: " + self.cor.tazul() + '@' + username + self.cor.end() + 
@@ -347,7 +345,7 @@ class Usuario:
         StringToBytes = bytes(JSONToString, "utf-8")
         # ToDo: Enviar o tamMensagem em 2 bytes para o peer
         socket.sendall(StringToBytes)
-        
+    
     # Encerra todas as conexões P2P do Usuario #
     def quitAll_p2p(self):
         print(self.cor.tazul() + "Encerrando todas as conexões..." + self.cor.tazul() + self.cor.end())
@@ -380,7 +378,6 @@ def main():
     
     app = Usuario(host, int(porta), nConexoes, HOSTSC, int(PORTASC))
     app.start()
-    
     
 if __name__ == "__main__":
     main()
