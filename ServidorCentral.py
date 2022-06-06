@@ -111,7 +111,7 @@ class ServidorCentral:
                     status, mensagem = self.registrarUsuarioON(username_usuario, endereco, dadosJSON["porta"])
                 elif operacao_usuario == "logoff":
                     username_usuario = dadosJSON["username"]
-                    status, mensagem = self.deslogarUsuario(username_usuario)
+                    status, mensagem = self.deslogarUsuario(username_usuario, clisock, endereco)
                 elif operacao_usuario == "get_lista":
                     status, mensagem = self.getUsuariosOnline()
                 else: # Se o cliente tiver tratamento de erro quanto as requisições, essa condição nunca roda
@@ -138,9 +138,9 @@ class ServidorCentral:
         return(400, "Username em Uso")
                     
     # Método que desregistra um usuário online devido ao evento (requisição) de logoff #
-    # // Entrada: Username a ser deslogado
+    # // Entrada: Username a ser deslogado, Socket e Endereco desse cliente
     # // Saída: Tupla contendo o (status, mensagem) da operação 
-    def deslogarUsuario(self, username):
+    def deslogarUsuario(self, username, clisock, endereco):
         if ServidorCentral.usuariosOnline.get(username):
             # Condição de corrida
             ServidorCentral.lock.acquire()
