@@ -1,6 +1,6 @@
 #-*- encoding: utf-8
 
-'''' 
+'''
 Classe simples, que implementa caracteres de escape (ANSI), para 
 deixar o texto mais rico, impresso no terminal, através de cores 
 (em foreground e background - cor de fundo) e formatações, em negrito 
@@ -14,7 +14,9 @@ class RichTextOnTerminal:
         # Caracter especial de escape ANSI, que reseta as formatações
         self.reset_ANSI = "\u001b[0m"
     
-    # Retorna o endereço em memória da função de cada cor selecionada por n# 
+    # Método que permite selecionar a cor de um texto dado um número inteiro #
+    # // Entrada: Um número inteiro aleatório (random) n - escolhido em Usuario
+    # // Saída: O endereço de memória do método que modifica a cor do texto, selecionado por n
     def selecionaCor(self, n):
         if n == 0:
             return self.tverde
